@@ -1,0 +1,1978 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>I See You</title>
+<style>
+  :root{
+    --ink:#e8dcc8;
+    --dim:#8a7a66;
+    --line:rgba(232,220,200,.14);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden;background:#080607;}
+  body{
+    font:400 11px/1.5 ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+    cursor:crosshair;
+  }
+  canvas#c{display:block;position:fixed;inset:0;width:100%;height:100%;}
+
+  /* ---------- chrome ---------- */
+  .chrome{position:fixed;z-index:10;pointer-events:none;transition:opacity .5s ease;}
+  .chrome.hidden{opacity:0 !important;}
+
+  #title{top:22px;left:24px;}
+  #title h1{
+    font:400 10px/1 ui-monospace,monospace;
+    letter-spacing:.42em;text-transform:uppercase;
+    color:rgba(232,220,200,.72);
+  }
+  #title p{
+    margin-top:9px;max-width:30ch;
+    font-size:9.5px;line-height:1.7;letter-spacing:.09em;
+    color:rgba(232,220,200,.30);
+  }
+
+  #motto{
+    bottom:22px;right:24px;text-align:right;
+    font-size:9px;letter-spacing:.19em;line-height:1.9;
+    color:rgba(232,220,200,.24);max-width:34ch;
+  }
+  #motto b{font-weight:400;color:rgba(232,220,200,.42)}
+
+  /* ---------- panel ---------- */
+  #panel{
+    position:fixed;z-index:12;left:24px;bottom:22px;
+    width:214px;pointer-events:auto;
+    border:1px solid var(--line);
+    background:rgba(10,8,9,.62);
+    backdrop-filter:blur(12px) saturate(140%);
+    -webkit-backdrop-filter:blur(12px) saturate(140%);
+    opacity:.30;transition:opacity .35s ease,transform .35s ease;
+    transform:translateY(0);
+  }
+  #panel:hover,#panel.open{opacity:1;}
+  #panel.hidden{opacity:0;pointer-events:none;transform:translateY(8px);}
+  /* stowed: the resting state on a phone, where the panel would otherwise eat
+     half the screen. Must out-rank :hover and .open, so it comes after them. */
+  #panel.stow{opacity:0;pointer-events:none;transform:translateY(10px);}
+  #panel header{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:8px 10px;border-bottom:1px solid var(--line);
+    font-size:8.5px;letter-spacing:.3em;text-transform:uppercase;
+    color:rgba(232,220,200,.5);
+  }
+  /* the camera preview makes this tall — never let it run off the top */
+  #panel .body{padding:4px 10px 10px;max-height:calc(100vh - 78px);overflow-y:auto;}
+  #panel .body::-webkit-scrollbar{width:3px}
+  #panel .body::-webkit-scrollbar-thumb{background:rgba(232,220,200,.22)}
+  .row{display:flex;align-items:center;gap:8px;padding:5px 0;}
+  .row label{
+    flex:0 0 62px;font-size:8.5px;letter-spacing:.16em;
+    text-transform:uppercase;color:rgba(232,220,200,.42);
+  }
+  .row .val{
+    flex:0 0 30px;text-align:right;font-size:9px;
+    color:rgba(232,220,200,.62);font-variant-numeric:tabular-nums;
+  }
+  input[type=range]{
+    -webkit-appearance:none;appearance:none;flex:1;height:14px;background:transparent;cursor:ew-resize;
+  }
+  input[type=range]::-webkit-slider-runnable-track{height:1px;background:rgba(232,220,200,.22)}
+  input[type=range]::-moz-range-track{height:1px;background:rgba(232,220,200,.22)}
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:7px;height:7px;margin-top:-3px;border-radius:50%;
+    background:#d8c39a;box-shadow:0 0 6px rgba(216,195,154,.7);
+  }
+  input[type=range]::-moz-range-thumb{
+    width:7px;height:7px;border:0;border-radius:50%;background:#d8c39a;
+  }
+  .toggles{display:flex;flex-wrap:wrap;gap:4px;padding-top:8px;margin-top:4px;border-top:1px solid var(--line);}
+  .tg{
+    flex:1 1 auto;padding:5px 6px;text-align:center;cursor:pointer;
+    border:1px solid var(--line);background:transparent;
+    font:400 8px/1 ui-monospace,monospace;letter-spacing:.16em;text-transform:uppercase;
+    color:rgba(232,220,200,.36);transition:.18s;
+  }
+  .tg:hover{color:rgba(232,220,200,.8);border-color:rgba(232,220,200,.3)}
+  .tg.on{color:#0d0a09;background:#c9b28a;border-color:#c9b28a;}
+  .hint{padding-top:8px;font-size:8px;letter-spacing:.1em;color:rgba(232,220,200,.22);line-height:1.8}
+  .hint kbd{
+    font:inherit;border:1px solid var(--line);padding:0 3px;color:rgba(232,220,200,.42);
+  }
+
+  /* ---------- camera ---------- */
+  #cam-wrap{
+    position:relative;display:none;margin-top:8px;
+    border:1px solid var(--line);background:#000;overflow:hidden;
+    aspect-ratio:4/3;
+  }
+  #cam-wrap.show{display:block}
+  #cam-vid{width:100%;height:100%;object-fit:cover;display:block;opacity:.55}
+  #cam-vid.mir{transform:scaleX(-1)}
+  #cam-ov{position:absolute;inset:0;width:100%;height:100%;}
+  #face-stat{
+    padding-top:7px;font-size:8px;letter-spacing:.1em;line-height:1.7;
+    color:rgba(232,220,200,.30);word-break:break-word;
+  }
+  #face-stat.err{color:#d2725c}
+  #face-stat.ok{color:#9fc08a}
+
+  /* ---------- loader ---------- */
+  #loader{
+    position:fixed;inset:0;z-index:40;display:grid;place-content:center;gap:16px;
+    background:#080607;transition:opacity .7s ease;text-align:center;
+  }
+  #loader.gone{opacity:0;pointer-events:none}
+  #loader .word{
+    font-size:11px;letter-spacing:.52em;text-transform:uppercase;
+    color:rgba(232,220,200,.55);animation:breathe 2.6s ease-in-out infinite;
+  }
+  #loader .bar{width:220px;height:1px;background:rgba(232,220,200,.14);position:relative;overflow:hidden;margin:0 auto}
+  #loader .bar i{position:absolute;inset:0;width:0;background:#c9b28a;transition:width .18s linear}
+  #loader .sub{font-size:8.5px;letter-spacing:.24em;color:rgba(232,220,200,.22)}
+  @keyframes breathe{0%,100%{opacity:.35}50%{opacity:.95}}
+
+  /* ---------- dock ---------- */
+  /* the switch that summons the panel; only ever present where the panel is
+     stowable, so it can never collide with the desktop panel's own corner */
+  #dock{
+    position:fixed;z-index:13;display:none;
+    left:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));
+    width:44px;height:44px;padding:0;
+    align-items:center;justify-content:center;
+    border:1px solid var(--line);border-radius:50%;
+    background:rgba(10,8,9,.62);
+    backdrop-filter:blur(12px) saturate(140%);
+    -webkit-backdrop-filter:blur(12px) saturate(140%);
+    color:rgba(232,220,200,.55);
+    cursor:pointer;-webkit-tap-highlight-color:transparent;
+    transition:opacity .35s ease,color .2s,background .2s,border-color .2s;
+  }
+  #dock svg{width:19px;height:19px;display:block}
+  #dock.on{color:#0d0a09;background:#c9b28a;border-color:#c9b28a}
+  #dock.hidden{opacity:0;pointer-events:none}
+
+  /* anywhere the panel stows: every touch device, plus any narrow window */
+  @media (max-width:720px),(hover:none){
+    #dock{display:flex}
+    #panel{
+      bottom:calc(72px + env(safe-area-inset-bottom,0px));
+      opacity:1;
+    }
+    /* the camera preview is what makes this tall — cap it and let it scroll */
+    #panel .body{max-height:52vh;max-height:52dvh;}
+  }
+
+  /* coarse pointers need targets a finger can actually land on */
+  @media (hover:none){
+    .row{padding:7px 0}
+    .tg{padding:10px 6px;font-size:8.5px}
+    input[type=range]{height:26px}
+    input[type=range]::-webkit-slider-thumb{width:13px;height:13px;margin-top:-6px}
+    input[type=range]::-moz-range-thumb{width:13px;height:13px}
+    .hint{display:none}          /* keyboard shortcuts mean nothing here */
+    body{cursor:default}
+  }
+
+  @media (max-width:720px){
+    #title{top:calc(14px + env(safe-area-inset-top,0px));left:16px}
+    #title p{display:none}
+    #motto{display:none}
+    #panel{left:12px;right:12px;width:auto;}
+  }
+</style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+
+<div id="title" class="chrome">
+  <h1>I See You</h1>
+  <p>An iris assembled from language. Sixty-one concentric lexicons in differential rotation. It holds your gaze.</p>
+</div>
+
+<div id="motto" class="chrome">
+  <b>DON'T LOOK AWAY</b><br>
+  HOLD MY GAZE<br>
+  WHAT LIES WITHIN
+</div>
+
+<div id="panel">
+  <header><span>Apparatus</span><span id="fps">—</span></header>
+  <div class="body">
+    <div class="row"><label>Spin</label><input id="s-spin" type="range" min="0" max="300" value="100"><span class="val" id="v-spin">1.0</span></div>
+    <div class="row"><label>Wash</label><input id="s-wash" type="range" min="0" max="100" value="42"><span class="val" id="v-wash">.42</span></div>
+    <div class="row"><label>Bloom</label><input id="s-bloom" type="range" min="0" max="100" value="45"><span class="val" id="v-bloom">.45</span></div>
+    <div class="row"><label>Grain</label><input id="s-grain" type="range" min="0" max="100" value="34"><span class="val" id="v-grain">.34</span></div>
+    <div class="row"><label>Density</label><input id="s-den" type="range" min="70" max="140" value="100"><span class="val" id="v-den">1.0</span></div>
+    <div class="row"><label>Reach</label><input id="s-reach" type="range" min="40" max="320" value="170"><span class="val" id="v-reach">1.7</span></div>
+    <div class="toggles">
+      <button class="tg on" id="t-follow">Gaze</button>
+      <button class="tg on" id="t-blink">Blink</button>
+      <button class="tg on" id="t-fibre">Stroma</button>
+      <button class="tg" id="t-pause">Halt</button>
+    </div>
+    <div class="toggles">
+      <button class="tg" id="t-face" style="flex:2 1 0">Face ◉</button>
+      <button class="tg on" id="t-mirror" style="flex:1 1 0">Mirror</button>
+      <button class="tg" id="t-cam" style="flex:1 1 0">Feed</button>
+    </div>
+    <div class="toggles">
+      <button class="tg" id="t-regen">Transmute ⟳</button>
+    </div>
+    <div id="cam-wrap">
+      <video id="cam-vid" playsinline muted autoplay></video>
+      <canvas id="cam-ov"></canvas>
+    </div>
+    <div id="face-stat">camera idle — press <b>Face</b> to let it see you</div>
+    <div class="hint"><kbd>space</kbd> halt · <kbd>r</kbd> transmute · <kbd>h</kbd> hide · <kbd>f</kbd> full</div>
+  </div>
+</div>
+
+<button id="dock" type="button" aria-label="Apparatus" aria-controls="panel" aria-expanded="false">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"
+       stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M1.6 12S5.2 5.5 12 5.5 22.4 12 22.4 12 18.8 18.5 12 18.5 1.6 12 1.6 12Z"/>
+    <circle cx="12" cy="12" r="3.1"/>
+  </svg>
+</button>
+
+<div id="loader">
+  <div class="word" id="ld-word">Coagulating</div>
+  <div class="bar"><i id="ld-bar"></i></div>
+  <div class="sub" id="ld-sub">inscribing the stroma</div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ══════════════════════════════════════════════════════════════════════════
+   0 · PRIMITIVES
+   ══════════════════════════════════════════════════════════════════════════ */
+const TAU = Math.PI * 2;
+const clamp = (v,a,b) => v<a?a:v>b?b:v;
+const lerp  = (a,b,t) => a + (b-a)*t;
+const smooth= t => t*t*(3-2*t);
+function lerpHue(a,b,t){ const d = ((b-a+540)%360)-180; return (a+d*t+360)%360; }
+
+function mulberry32(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a>>>15, 1|a);
+    t = t + Math.imul(t ^ t>>>7, 61|t) ^ t;
+    return ((t ^ t>>>14) >>> 0) / 4294967296;
+  };
+}
+/* The seed IS the plate: same seed, same word placement, same palette drift,
+   same flips. Read it from ?seed= so a plate worth keeping can be bookmarked or
+   handed to someone else; fall back to a fresh one when the URL says nothing. */
+function seedFromURL(){
+  try{
+    const q = new URLSearchParams(location.search).get("seed");
+    if(q !== null && q.trim() !== ""){
+      const n = Number(q);
+      if(Number.isFinite(n)) return Math.abs(n|0) || 1;
+    }
+  }catch(e){ /* no URLSearchParams, or an opaque origin */ }
+  return (Math.random()*1e9)|0;
+}
+let SEED = seedFromURL();
+
+/* Write the live seed back into the address bar, so the URL always describes
+   what is on screen and Transmute never loses a plate you liked. replaceState
+   is forbidden on file:// — the console line is the fallback there. */
+function publishSeed(){
+  try{
+    const u = new URL(location.href);
+    u.searchParams.set("seed", String(SEED));
+    history.replaceState(null, "", u);
+  }catch(e){}
+  try{ console.log("seed:", SEED, "— reload this URL to reproduce the plate"); }catch(e){}
+}
+let rng  = mulberry32(SEED);
+
+/* deterministic pseudo-noise over an angle — sum of incommensurate sines */
+function noise1(a, s){
+  return 0.55*Math.sin(a*2.0 + s*1.7)
+       + 0.30*Math.sin(a*5.0 + s*3.1)
+       + 0.18*Math.sin(a*11.0 + s*5.3)
+       + 0.10*Math.sin(a*19.0 + s*7.9);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   1 · THE LEXICON
+   Words are banded by depth. The pupil speaks negation and void; the inner
+   iris speaks mind and breath; the mid iris speaks fire and transmutation;
+   the outer iris speaks law and structure; the limbus speaks threshold;
+   the sclera speaks light and disclosure; the surrounding flesh speaks
+   world, appearance, and the machinery of seeing.
+   ══════════════════════════════════════════════════════════════════════════ */
+const LEX = {
+PUPIL:[
+"VOID","ABYSS","DEPTHS","DEPTH",
+"CORE","HOLLOW","UNSEEN","HIDDEN",
+"OBSCURED","BLIND","BLINDNESS","SHADOW",
+"SECRET","ENIGMA","UNKNOWN","SILENCE",
+"DISTANT","OTHERWORLDLY","PHANTOM","SPECTER",
+"APPARITION","VEIL","WITHIN","INNER",
+"INTERIOR","DEEP","SELF","SOUL",
+"PSYCHE","BEING","ESSENCE","SPIRIT",
+"TRUTH","EYE","IRIS","PUPIL",
+"SEE","LOOK","GAZE","SEEN",
+"SIGHT","KNOW","AWAKE","CLOSED EYES",
+"SIGHT UNSEEN","BEYOND SIGHT","OUT OF SIGHT","INTO ME",
+"LOOK WITHIN","INNER SIGHT","WHAT LIES WITHIN","BENEATH THE SURFACE",
+"INTO THE SOUL","SOUL SIGHT","SOUL GAZE","UNBLINKING",
+"VIGIL","OMEN","WATCHER","THE GAZE",
+"THE LOOK","LUCIDITY","CLARITY","INTUITION",
+"INTROSPECTION"
+],
+INNER:[
+"SOUL","SPIRIT","ESSENCE","PSYCHE",
+"CONSCIOUSNESS","BEING","SELF","IDENTITY",
+"PRESENCE","TRUTH","CORE","INNER",
+"INTERIOR","WITHIN","DEPTH","DEPTHS",
+"DEEP","INTIMACY","INTIMATE","VULNERABILITY",
+"EXPOSURE","REVELATION","RECOGNITION","CONNECTION",
+"KNOWING","KNOW","AWARENESS","PERCEPTION",
+"INSIGHT","INTUITION","LUCIDITY","CLARITY",
+"INTROSPECTION","LONGING","DESIRE","ENCOUNTER",
+"SILENCE","REFLECTION","MIRROR","WINDOW",
+"PORTAL","THRESHOLD","PASSAGE","LIGHT",
+"SHADOW","SPARK","GLIMMER","GLEAM",
+"RADIANCE","LOOK WITHIN","INNER SIGHT","INTO ME",
+"AWAKE","SOUL GAZE","SOUL SIGHT","INTO THE SOUL",
+"WINDOW TO THE SOUL","WHAT LIES WITHIN","BENEATH THE SURFACE","BEHIND THE EYES",
+"THROUGH THE EYES","READ ME","KNOW ME","UNDERSTAND ME",
+"REMEMBER ME","FIND ME","NOTICE ME","RECOGNIZE ME",
+"WITNESS ME","SEE THROUGH ME","LOOK THROUGH ME","READ MY EYES"
+],
+MID:[
+"PIERCING","PENETRATING","SEARCHING","UNFLINCHING",
+"DIRECT","INTENT","FIXED","LOCKED",
+"ARRESTING","MAGNETIC","MESMERIZING","HYPNOTIC",
+"HAUNTING","COMMANDING","KNOWING","WATCHFUL",
+"UNWAVERING","TRANSFIXING","CAPTIVATING","INTIMATE",
+"STARE","GAZE","FIXATE","FOCUS",
+"CONFRONT","REGARD","WATCH","WITNESS",
+"BEHOLD","PEER","SCAN","SEARCH",
+"SEEK","SURVEY","INSPECT","EXAMINE",
+"STUDY","PERCEIVE","NOTICE","OBSERVE",
+"GLANCE","GLIMPSE","LIGHT","SPARK",
+"GLIMMER","GLEAM","RADIANCE","EXPOSURE",
+"APERTURE","THE GAZE","UNBROKEN GAZE","HOLD MY GAZE",
+"UNDER MY GAZE","EYES ON ME","DON'T LOOK AWAY","LOOK DEEPER",
+"MEET MY EYES","EYE TO EYE","FACE TO FACE","EYES NEVER LIE",
+"UNBLINKING","SILENT WITNESS","THE WATCHER","THE WITNESS",
+"ALL-SEEING","SURVEILLANCE","VIGIL","WATCHER",
+"AWAKE"
+],
+OUTER:[
+"SEE","LOOK","BEHOLD","OBSERVE",
+"WATCH","NOTICE","WITNESS","PERCEIVE",
+"EXAMINE","STUDY","SEARCH","SEEK",
+"SCAN","PEER","GLIMPSE","GLANCE",
+"STARE","GAZE","FIXATE","FOCUS",
+"REGARD","SURVEY","INSPECT","CONFRONT",
+"EYES","EYE","IRIS","PUPIL",
+"SIGHT","VISION","VIEW","LENS",
+"OPTIC","OCULUS","OBSERVER","APERTURE",
+"EXPOSURE","PERSPECTIVE","PERCEPTION","INSIGHT",
+"FORESIGHT","HINDSIGHT","SIGHTLINE","VIEWPOINT",
+"POINT OF VIEW","FIELD OF VIEW","VISAGE","PRESENCE",
+"RECOGNITION","REVELATION","REFLECTION","CLARITY",
+"LUCIDITY","INTUITION","AWARENESS","SEEN",
+"UNSEEN","BE SEEN","OPEN EYES","CLOSED EYES",
+"NAKED EYE","PRIVATE EYES","SECOND SIGHT","IN PLAIN SIGHT",
+"OUT OF SIGHT","SIGHT UNSEEN","BEYOND SIGHT","INNER SIGHT",
+"FACE","MEET","READ","KNOW",
+"DEEP","AWAKE","WITHIN"
+],
+LIMBUS:[
+"THRESHOLD","PASSAGE","PORTAL","WINDOW",
+"MIRROR","REFLECTION","VEIL","SHADOW",
+"LIGHT","SILENCE","PRESENCE","ENCOUNTER",
+"CONNECTION","RECOGNITION","LONGING","DESIRE",
+"INTIMACY","VULNERABILITY","EXPOSURE","REVELATION",
+"DEPTH","DEPTHS","CORE","WITHIN",
+"BEYOND SIGHT","BENEATH THE SURFACE","THE SPACE BETWEEN EYES","BEHIND THE EYES",
+"THROUGH THE EYES","WINDOW TO THE SOUL","INTO THE SOUL","FACE TO FACE",
+"EYE TO EYE","MEET MY EYES","HOLD MY GAZE","IN PLAIN SIGHT",
+"OUT OF SIGHT","SIGHT UNSEEN","UNSEEN","SEEN",
+"BE SEEN","HIDDEN","OBSCURED","SECRET",
+"ENIGMA","UNKNOWN","DISTANT","OTHERWORLDLY",
+"APPARITION","SPECTER"
+],
+SCLERA:[
+"LIGHT","RADIANCE","GLEAM","GLIMMER",
+"SPARK","CLARITY","LUCIDITY","REVELATION",
+"RECOGNITION","INSIGHT","AWARENESS","PERCEPTION",
+"INTUITION","EXPOSURE","TRUTH","PRESENCE",
+"REFLECTION","MIRROR","WINDOW","SEEN",
+"BE SEEN","OPEN EYES","NAKED EYE","SECOND SIGHT",
+"PRIVATE EYES","IN PLAIN SIGHT","I SEE YOU","YOU SEE ME",
+"DO YOU SEE ME?","WHAT DO YOU SEE?","SEE ME","EYES NEVER LIE",
+"SILENT WITNESS","WITNESS","OBSERVER","VISION",
+"SIGHT","VISAGE","AWAKE"
+],
+FIELD:[
+"SEE ME","LOOK AT ME","FACE ME","WATCH ME",
+"MEET MY EYES","HOLD MY GAZE","FIND ME","NOTICE ME",
+"KNOW ME","RECOGNIZE ME","WITNESS ME","READ ME",
+"UNDERSTAND ME","REMEMBER ME","DON'T LOOK AWAY","EYES ON ME",
+"FACE TO FACE","EYE TO EYE","SEEN","UNSEEN",
+"BE SEEN","LOOK DEEPER","LOOK WITHIN","INTO ME",
+"WITHIN","THE GAZE","THE LOOK","THE WATCHER",
+"THE WITNESS","UNDER MY GAZE","BENEATH THE SURFACE","BEYOND SIGHT",
+"INNER SIGHT","SECOND SIGHT","PRIVATE EYES","OPEN EYES",
+"CLOSED EYES","NAKED EYE","IN PLAIN SIGHT","OUT OF SIGHT",
+"SIGHT UNSEEN","WHAT DO YOU SEE?","DO YOU SEE ME?","I SEE YOU",
+"YOU SEE ME","SEE THROUGH ME","LOOK THROUGH ME","READ MY EYES",
+"BEHIND THE EYES","THROUGH THE EYES","EYES NEVER LIE","WINDOW TO THE SOUL",
+"INTO THE SOUL","SOUL GAZE","SOUL SIGHT","SILENT WITNESS",
+"UNBROKEN GAZE","UNBLINKING","THE SPACE BETWEEN EYES","WHAT LIES WITHIN",
+"WATCHER","VIGIL","SURVEILLANCE","OMEN",
+"ALL-SEEING","HOLLOW","DISTANT","OTHERWORLDLY",
+"PHANTOM","SPECTER","APPARITION","VOID",
+"ABYSS","SECRET","ENIGMA","UNKNOWN",
+"HIDDEN","OBSCURED","BLIND","BLINDNESS",
+"VEIL","SHADOW","EYES","EYE",
+"IRIS","PUPIL","GAZE","GLANCE",
+"STARE","LOOK","SIGHT","VISION",
+"VIEW","FOCUS","LENS","OPTIC",
+"OCULUS","REGARD","WATCH","WITNESS",
+"OBSERVER","SEE","BEHOLD","OBSERVE",
+"NOTICE","PERCEIVE","EXAMINE","STUDY",
+"SEARCH","SEEK","SCAN","PEER",
+"GLIMPSE","FIXATE","SURVEY","INSPECT",
+"CONFRONT","AWAKE"
+]
+};
+const BAND_KEYS = ["PUPIL","INNER","MID","OUTER","LIMBUS","SCLERA","FIELD"];
+
+/* The illegible connective tissue is cut from the same cloth: fragments of the
+   lexicon itself rather than invented letter-clusters or a borrowed alphabet, so
+   every mark on the plate traces back to a word in the list. */
+function lexLetters(band){
+  const arr = LEX[band] || LEX.FIELD;
+  return arr[(rng()*arr.length)|0].replace(/[^A-Z]/g,"");
+}
+function glyphNoise(band){
+  const w = lexLetters(band);
+  if(w.length < 4) return w;
+  const n = 2 + (rng()*4|0);
+  const i = (rng()*Math.max(1, w.length - n))|0;
+  return w.slice(i, i+n);
+}
+function pickToken(band, single){
+  if(single){
+    const w = lexLetters(band);
+    return w.charAt((rng()*w.length)|0) || "E";
+  }
+  if(rng() < 0.17) return glyphNoise(band);
+  const arr = LEX[band] || LEX.FIELD;
+  return arr[(rng()*arr.length)|0];
+}
+
+/* Share of rings inscribed against the direction of reading. This matters far
+   more here than it did with a Latin lexicon: reversed Latin still looks
+   cryptic, but reversed English reads as plainly backwards. Lower it toward
+   0.15 for a more legible plate, raise it toward 0.5 for a more encrypted one. */
+const FLIP_RATE = 0.42;
+
+/* ══════════════════════════════════════════════════════════════════════════
+   2 · CHROMATICS
+   A single radial stop-table spans pupil → iris → limbus → sclera → flesh.
+   Angular pseudo-noise breaks it into organic sectors and striations.
+   ══════════════════════════════════════════════════════════════════════════ */
+const STOPS = [
+  /* t      h     s    l   */
+  [0.000, 228,  26,   6],
+  [0.150, 226,  30,   9],
+  [0.250, 220,  38,  13],
+  [0.300, 212,  50,  19],
+  [0.330, 203,  58,  22],   /* pupil rim ignition */
+  [0.375, 197,  54,  31],
+  [0.430, 188,  42,  37],
+  [0.478, 158,  30,  34],   /* the green passage */
+  [0.520,  50,  40,  33],
+  [0.565,  44,  74,  46],
+  [0.630,  40,  82,  55],   /* gold crown */
+  [0.700,  31,  76,  49],
+  [0.775,  18,  66,  39],
+  [0.845, 358,  46,  28],
+  [0.910, 236,  36,  16],
+  [0.975, 226,  32,   8],   /* limbal ring */
+  [1.020, 220,  26,  12],
+  [1.070,  14,  30,  44],
+  [1.130,  22,  32,  70],   /* sclera — bone, but warm */
+  [1.210,  19,  36,  78],
+  [1.300,  13,  44,  67],
+  [1.380,  12,  50,  56],
+  [1.520,   9,  58,  47],
+  [1.800,   5,  60,  40],
+  [2.200, 357,  56,  35],
+  [2.800,  16,  52,  37],
+  [4.000,  10,  46,  26]
+];
+function sampleStops(t){
+  if(t <= STOPS[0][0]) return [STOPS[0][1],STOPS[0][2],STOPS[0][3]];
+  const L = STOPS[STOPS.length-1];
+  if(t >= L[0]) return [L[1],L[2],L[3]];
+  for(let i=0;i<STOPS.length-1;i++){
+    const A = STOPS[i], B = STOPS[i+1];
+    if(t >= A[0] && t <= B[0]){
+      const e = smooth((t - A[0])/(B[0]-A[0]));
+      return [lerpHue(A[1],B[1],e), lerp(A[2],B[2],e), lerp(A[3],B[3],e)];
+    }
+  }
+  return [L[1],L[2],L[3]];
+}
+/* t = r / irisRadius ; a = angle. Deterministic — no rng. */
+function sampleColor(t, a){
+  let [h,s,l] = sampleStops(t);
+  const inIris = t > 0.30 && t < 1.0;
+  const amp = inIris
+    ? Math.pow(Math.sin(clamp((t-0.30)/0.70,0,1)*Math.PI), 0.62)
+    : (t >= 1.0 ? 0.88 : 0.30);
+  const n1 = noise1(a, 3.1), n2 = noise1(a*0.63 + 2.2, 7.7), n3 = noise1(a*2.7 + 5.5, 1.3);
+  h += n1 * 19 * amp;
+  s += n2 * 17 * amp;
+  l += n1 * 9 * amp + n3 * 6.5 * amp;
+  if(inIris) l += Math.sin(a*53 + t*24) * 3.6 * amp;          /* fine striation  */
+  if(inIris) l += Math.sin(a*17 + 1.4) * 4.0 * amp;           /* coarse sectors  */
+  if(t > 1.28){                                               /* dermal blotching */
+    l += noise1(a*1.3 + t*3.0, 9.1) * 8;
+    h += noise1(a*0.8 + t*2.0, 4.4) * 12;
+    s += noise1(a*1.9 + t*1.4, 6.6) * 10;
+  }
+  return [h, clamp(s,0,96), clamp(l,1.5,93)];
+}
+/* scattered vivid words, as in the source plate */
+const ACCENTS = [
+  [190,72,52],[332,64,56],[268,54,58],[ 84,52,50],
+  [ 45,88,62],[  0,74,52],[210,70,58],[160,58,46],[ 24,90,58]
+];
+function tokenColor(t, a){
+  let [h,s,l] = sampleColor(t, a);
+  h += (rng()-0.5)*11;
+  s += (rng()-0.5)*20;
+  l += (rng()-0.5)*17;
+  const r = rng();
+  if(r < 0.044){ const A = ACCENTS[rng()*ACCENTS.length|0]; h = A[0]; s = A[1]; l = A[2] + (rng()-0.5)*12; }
+  else if(r < 0.16) l += 19;      /* the word that catches the light */
+  else if(r < 0.27) l -= 13;      /* the word that recedes           */
+  return "hsl(" + h.toFixed(1) + " " + clamp(s,0,100).toFixed(1) + "% " + clamp(l,1.5,94).toFixed(1) + "%)";
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   3 · TYPOGRAPHY
+   ══════════════════════════════════════════════════════════════════════════ */
+const FACES = [
+  {f:"'Arial Narrow','Helvetica Neue',Arial,sans-serif", w:700, k:1.00},
+  {f:"'Arial Narrow','Helvetica Neue',Arial,sans-serif", w:400, k:1.00},
+  {f:"Impact,'Haettenschweiler','Arial Narrow Bold',sans-serif", w:400, k:1.06},
+  {f:"'Helvetica Neue',Helvetica,Arial,sans-serif", w:800, k:0.98},
+  {f:"'Futura','Century Gothic','Avant Garde',sans-serif", w:700, k:0.96},
+  {f:"Georgia,'Times New Roman',serif", w:700, k:0.98},
+  {f:"ui-monospace,Menlo,Consolas,monospace", w:700, k:0.94}
+];
+const FACE_W = [0.30,0.10,0.22,0.14,0.10,0.08,0.06];
+function pickFace(){
+  let r = rng(), acc = 0;
+  for(let i=0;i<FACE_W.length;i++){ acc += FACE_W[i]; if(r <= acc) return FACES[i]; }
+  return FACES[0];
+}
+
+const wCache = new Map();
+function charW(ctx, font, ch){
+  const key = font + " " + ch;
+  let v = wCache.get(key);
+  if(v === undefined){ v = ctx.measureText(ch).width; wCache.set(key, v); }
+  return v;
+}
+
+function bandFor(t){
+  if(t < 0.315) return "PUPIL";
+  if(t < 0.500) return "INNER";
+  if(t < 0.775) return "MID";
+  if(t < 0.945) return "OUTER";
+  if(t < 1.055) return "LIMBUS";
+  if(t < 1.340) return "SCLERA";
+  return "FIELD";
+}
+
+/**
+ * Lay text along a circular arc. Tokens are generated until they overflow the
+ * arc, then every advance is scaled so the run closes exactly — no seam.
+ */
+function drawArc(ctx, r, fs, face, flip, t, a0, a1, alpha){
+  if(r < 2.2 || fs < 2.2) return 0;
+  const font = face.w + " " + fs.toFixed(2) + "px " + face.f;
+  ctx.font = font;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  if(alpha !== undefined) ctx.globalAlpha = alpha;
+
+  const span   = a1 - a0;
+  const arcLen = span * r;
+  const single = arcLen < fs * 11;
+  const band   = bandFor(t);
+  const gap    = fs * (single ? 0.14 : 0.30);
+
+  const toks = [];
+  let total = 0, guard = 0, count = 0;
+  while(total < arcLen && guard++ < 900){
+    const s = pickToken(band, single);
+    let w = 0;
+    for(const ch of s) w += charW(ctx, font, ch);
+    toks.push({s:s, w:w});
+    total += w + gap;
+  }
+  if(total <= 0) return 0;
+  const k = arcLen / total;
+
+  let a = a0;
+  for(let i=0;i<toks.length;i++){
+    const tok = toks[i];
+    const perChar = rng() < 0.20;
+    if(!perChar) ctx.fillStyle = tokenColor(t, a);
+    for(const ch of tok.s){
+      const w  = charW(ctx, font, ch) * k;
+      const mid = a + (w*0.5)/r;
+      if(mid > a1 + 0.02) break;
+      if(perChar) ctx.fillStyle = tokenColor(t, mid);
+      ctx.save();
+      ctx.translate(r*Math.cos(mid), r*Math.sin(mid));
+      ctx.rotate(mid + Math.PI/2 + (flip ? Math.PI : 0));
+      ctx.fillText(ch, 0, 0);
+      ctx.restore();
+      a += w/r;
+      count++;
+    }
+    a += gap * k / r;
+  }
+  if(alpha !== undefined) ctx.globalAlpha = 1;
+  return count;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   4 · STAGE
+   ══════════════════════════════════════════════════════════════════════════ */
+const cv  = document.getElementById("c");
+const ctx = cv.getContext("2d", {alpha:false});
+
+let W=0, H=0, DPR=1, LDPR=1;
+let EX=0, EY=0;          /* eye centre, css px          */
+let R=0;                 /* iris radius, css px         */
+let SR=0;                /* sclera outer radius         */
+let CORNER=0;            /* eye centre → farthest corner*/
+let sc=1;                /* global type scale           */
+
+const RING_LAYERS = 5;
+let irisBase = null;     /* stroma wash + fibres + crypts (slow spin)  */
+let ringLayers = [];     /* the revolving lexicons                     */
+let scleraLayer = null;  /* white of the eye (very slow counter-spin)  */
+let fieldLayer = null;   /* lids, lashes, surrounding flesh (static)   */
+let grainCv = null;
+let vigCv = null;
+let glowCv = null, glowCtx = null;
+let blurCv = null, blurCtx = null;
+
+function mkCanvas(w,h){
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(w));
+  c.height = Math.max(1, Math.round(h));
+  return c;
+}
+
+/* ---- parameters bound to the UI ---- */
+const P = {
+  spin: 1.0, wash: 0.42, bloom: 0.45, grain: 0.34, density: 1.0, reach: 1.7,
+  follow: true, blink: true, fibre: true, paused: false, mirror: true
+};
+
+/* ---- face state, written by the camera module below ---- */
+const F = { on:false, x:0, y:0, size:0, last:-1e9 };
+
+/* ---- gaze state ---- */
+const G = {
+  tx:0, ty:0,      /* target gaze, unit disc  */
+  x:0,  y:0,       /* eased gaze              */
+  pupil:0.30,      /* pupil radius / R        */
+  pupilT:0.30,
+  lastMove:0, idle:false,
+  wx:0, wy:0,      /* idle wander target      */
+  wnext:0,
+  blink:0, blinkNext:4, blinking:false, blinkPhase:0,
+  sacT:0, sacX:0, sacY:0
+};
+
+let TIME = 0, lastT = performance.now(), fps = 60, fpsAcc = 0, fpsN = 0;
+let sizeWatch = 0, pendingSize = null;
+let ready = false;
+
+/* ══════════════════════════════════════════════════════════════════════════
+   5 · CONSTRUCTION
+   The whole plate is inscribed once, in chunks, then merely rotated.
+   ══════════════════════════════════════════════════════════════════════════ */
+function fontSizeFor(t){
+  let fs;
+  if(t < 0.315)     fs = 5.4 + 6.6 * (t/0.315);
+  else if(t < 1.0)  fs = 9.0 + 12.6 * ((t-0.315)/0.685);
+  else if(t < 1.36) fs = 12.6 + 5.4 * ((t-1.0)/0.36);
+  else              fs = 17.0 + 21.0 * Math.min(1,(t-1.36)/1.45);
+  return fs * sc * P.density;
+}
+
+/* smooth angular wash — the colour the letters float in */
+function paintWash(target, rFrom, rTo, sectors, bands, alpha){
+  const pad = 6;
+  const size = Math.ceil((rTo + pad) * 2 / 3);
+  const tmp = mkCanvas(size, size);
+  const tc = tmp.getContext("2d");
+  tc.setTransform(1/3, 0, 0, 1/3, size/2, size/2);
+  const dA = TAU / sectors;
+  for(let i=0;i<sectors;i++){
+    const a0 = i*dA, a1 = a0 + dA*1.09;
+    const am = a0 + dA*0.5;
+    for(let j=0;j<bands;j++){
+      const r0 = lerp(rFrom, rTo, j/bands);
+      const r1 = lerp(rFrom, rTo, (j+1)/bands) * 1.03 + 0.6;
+      const col = sampleColor(((r0+r1)*0.5)/R, am);
+      tc.fillStyle = "hsl(" + col[0].toFixed(1) + " " + col[1].toFixed(1) + "% " + col[2].toFixed(1) + "%)";
+      tc.beginPath();
+      tc.arc(0,0,r1,a0,a1);
+      tc.arc(0,0,Math.max(0.5,r0),a1,a0,true);
+      tc.closePath();
+      tc.fill();
+    }
+  }
+  target.save();
+  target.filter = "blur(2.5px)";
+  if(alpha !== undefined) target.globalAlpha = alpha;
+  target.drawImage(tmp, -size*1.5, -size*1.5, size*3, size*3);
+  target.restore();
+}
+
+function newLayer(radius){
+  const px = Math.ceil(radius * 2 * LDPR);
+  const c  = mkCanvas(px, px);
+  const g  = c.getContext("2d");
+  g.setTransform(LDPR, 0, 0, LDPR, px/2, px/2);
+  return {cv:c, ctx:g, radius:radius, phase:0, dir:1, rate:0};
+}
+
+function* construct(){
+  /* ── 5.1 stroma base ───────────────────────────────────────────────── */
+  irisBase = newLayer(R * 1.005);
+  const bg = irisBase.ctx;
+  paintWash(bg, 0, R*1.005, 96, 46);
+  yield "washing the stroma";
+
+  /* radial fibres — the trabeculae of the iris */
+  const nFib = Math.round(1500 * (R/360));
+  for(let i=0;i<nFib;i++){
+    const a  = rng()*TAU;
+    const r0 = R*(0.30 + rng()*0.10);
+    const r1 = R*(0.62 + rng()*0.38);
+    const bow = (rng()-0.5)*0.10;
+    const rm = (r0+r1)*0.5, am = a + bow;
+    const cl = sampleColor(r1/R, a);
+    const bright = rng() < 0.45;
+    bg.beginPath();
+    bg.moveTo(r0*Math.cos(a), r0*Math.sin(a));
+    bg.quadraticCurveTo(rm*Math.cos(am), rm*Math.sin(am), r1*Math.cos(a+bow*0.4), r1*Math.sin(a+bow*0.4));
+    bg.lineWidth = (0.5 + rng()*2.4) * sc;
+    bg.strokeStyle = "hsla(" + cl[0].toFixed(0) + "," + clamp(cl[1]*1.1,0,100).toFixed(0) + "%,"
+      + clamp(cl[2] + (bright ? 26 : -22), 2, 96).toFixed(0) + "%," + (0.05 + rng()*0.16).toFixed(3) + ")";
+    bg.stroke();
+  }
+  yield "drawing the trabeculae";
+
+  /* crypts of Fuchs — dark lacunae around the collarette */
+  for(let i=0;i<Math.round(80*(R/360));i++){
+    const a = rng()*TAU;
+    const r = R*(0.34 + rng()*0.26);
+    const w = R*(0.02 + rng()*0.07), h = R*(0.012 + rng()*0.035);
+    bg.save();
+    bg.translate(r*Math.cos(a), r*Math.sin(a));
+    bg.rotate(a + (rng()-0.5)*0.5);
+    bg.filter = "blur(" + (1.5*sc).toFixed(1) + "px)";
+    bg.fillStyle = "rgba(6,8,16," + (0.24 + rng()*0.44).toFixed(3) + ")";
+    bg.beginPath();
+    bg.ellipse(0,0,w,h,0,0,TAU);
+    bg.fill();
+    bg.restore();
+  }
+  /* the collarette: ragged frontier of the pupillary zone */
+  bg.save();
+  bg.lineWidth = R*0.016;
+  for(let pass=0; pass<2; pass++){
+    bg.beginPath();
+    for(let i=0;i<=220;i++){
+      const a = i/220*TAU;
+      const rr = R*(0.335 + 0.030*noise1(a*3.1, 2.4) + 0.012*noise1(a*9.0, 5.1));
+      const x = rr*Math.cos(a), y = rr*Math.sin(a);
+      if(i===0) bg.moveTo(x,y); else bg.lineTo(x,y);
+    }
+    bg.closePath();
+    bg.filter = "blur(" + ((pass?4:1.2)*sc).toFixed(1) + "px)";
+    bg.strokeStyle = pass ? "rgba(255,206,128,.16)" : "rgba(255,224,168,.20)";
+    bg.stroke();
+  }
+  bg.restore();
+
+  /* limbal ring — the dark rim that makes an iris read as glass */
+  bg.save();
+  const lg = bg.createRadialGradient(0,0,R*0.80, 0,0,R*1.005);
+  lg.addColorStop(0.00,"rgba(4,6,14,0)");
+  lg.addColorStop(0.55,"rgba(4,6,14,.30)");
+  lg.addColorStop(0.86,"rgba(3,5,12,.72)");
+  lg.addColorStop(1.00,"rgba(2,3,9,.92)");
+  bg.fillStyle = lg;
+  bg.beginPath(); bg.arc(0,0,R*1.005,0,TAU); bg.fill();
+  bg.restore();
+  yield "setting the limbal ring";
+
+  /* ── 5.2 the revolving lexicons ────────────────────────────────────── */
+  ringLayers = [];
+  for(let i=0;i<RING_LAYERS;i++){
+    const L = newLayer(R * 1.005);
+    L.dir  = (i % 2 === 0) ? 1 : -1;
+    L.rate = 0.0125 * (0.42 + i*0.30) * (i===2 ? 1.7 : 1);
+    ringLayers.push(L);
+  }
+  irisBase.dir = -1; irisBase.rate = 0.0052;
+
+  let r = 3.0 * sc, idx = 0, rings = 0;
+  while(r <= R * 1.002){
+    const t   = r / R;
+    const fs  = fontSizeFor(t);
+    const face= pickFace();
+    const L   = ringLayers[idx % RING_LAYERS];
+    const a0  = rng()*TAU;
+    drawArc(L.ctx, r, fs * face.k, face, rng() < FLIP_RATE, t, a0, a0 + TAU,
+            t < 0.315 ? 0.95 : 1);
+    r += fs * 0.94;
+    idx++; rings++;
+    if(idx % 3 === 0) yield "inscribing ring " + rings;
+  }
+  yield "inscribing ring " + rings;
+
+  /* faint deep glints inside the pupil, as in the plate */
+  const pg = ringLayers[1].ctx;
+  for(let i=0;i<26;i++){
+    const a = rng()*TAU, rr = R*(0.06 + rng()*0.22);
+    pg.save();
+    pg.filter = "blur(" + (2*sc).toFixed(1) + "px)";
+    pg.fillStyle = "hsla(" + (185 + rng()*50).toFixed(0) + ",70%,"
+      + (26 + rng()*26).toFixed(0) + "%," + (0.10 + rng()*0.22).toFixed(3) + ")";
+    pg.beginPath();
+    pg.ellipse(rr*Math.cos(a), rr*Math.sin(a), R*0.018*(0.5+rng()), R*0.010*(0.5+rng()), a, 0, TAU);
+    pg.fill();
+    pg.restore();
+  }
+
+  /* ── 5.3 sclera ────────────────────────────────────────────────────── */
+  scleraLayer = newLayer(SR);
+  const scg = scleraLayer.ctx;
+  scleraLayer.dir = -1; scleraLayer.rate = 0.0030;
+  paintWash(scg, R*0.93, SR, 72, 22, 0.46);
+
+  /* conjunctival vessels */
+  for(let i=0;i<Math.round(150*(R/360));i++){
+    const a = rng()*TAU;
+    const r0 = SR*(0.98 + rng()*0.06);
+    const len = SR*(0.10 + rng()*0.34);
+    let x = r0*Math.cos(a), y = r0*Math.sin(a);
+    scg.beginPath(); scg.moveTo(x,y);
+    let dir = a + Math.PI + (rng()-0.5)*0.7;
+    const segs = 3 + (rng()*4|0);
+    for(let s=0;s<segs;s++){
+      dir += (rng()-0.5)*0.55;
+      const step = len/segs;
+      x += Math.cos(dir)*step; y += Math.sin(dir)*step;
+      scg.lineTo(x,y);
+    }
+    scg.lineWidth = (0.5 + rng()*1.5) * sc;
+    scg.strokeStyle = "hsla(" + (2 + rng()*14).toFixed(0) + ",72%," + (44 + rng()*18).toFixed(0)
+      + "%," + (0.10 + rng()*0.34).toFixed(3) + ")";
+    scg.stroke();
+  }
+  yield "irrigating the sclera";
+
+  r = R * 0.955;
+  while(r <= SR*0.995){
+    const t = r/R;
+    const fs = fontSizeFor(t);
+    const face = pickFace();
+    const a0 = rng()*TAU;
+    drawArc(scg, r, fs*face.k, face, rng()<0.45, t, a0, a0+TAU);
+    r += fs * 0.92;
+    yield "whitening";
+  }
+  /* inner shadow where the globe turns away */
+  scg.save();
+  const sg2 = scg.createRadialGradient(0,0,SR*0.72, 0,0,SR);
+  sg2.addColorStop(0,"rgba(30,10,8,0)");
+  sg2.addColorStop(0.72,"rgba(40,14,10,.20)");
+  sg2.addColorStop(1,"rgba(28,8,6,.62)");
+  scg.fillStyle = sg2;
+  scg.beginPath(); scg.arc(0,0,SR,0,TAU); scg.fill();
+  scg.restore();
+
+  /* ── 5.4 the surrounding flesh, lids, lashes ───────────────────────── */
+  fieldLayer = mkCanvas(W*DPR, H*DPR);
+  const fg = fieldLayer.getContext("2d");
+  fg.setTransform(DPR,0,0,DPR, EX*DPR, EY*DPR);
+  paintWash(fg, R*1.02, CORNER*1.12, 84, 34, 0.34);
+  yield "flushing the dermis";
+
+  r = R * 1.16;
+  let n = 0;
+  while(r < CORNER * 1.07){
+    const t = r/R;
+    const fs = fontSizeFor(t);
+    const face = pickFace();
+    const a0 = rng()*TAU;
+    drawArc(fg, r, fs*face.k, face, rng()<0.48, t, a0, a0+TAU);
+    r += fs * 0.93;
+    if(++n % 2 === 0) yield "inscribing the flesh";
+  }
+
+  /* radial spokes — words that point outward, breaking the concentric spell */
+  for(let i=0;i<Math.round(56*(R/360));i++){
+    const a = rng()*TAU;
+    const r0 = R*(1.30 + rng()*0.9);
+    const fs = fontSizeFor(r0/R) * 0.9;
+    const face = pickFace();
+    const word = LEX.FIELD[(rng()*LEX.FIELD.length)|0];
+    fg.save();
+    fg.translate(r0*Math.cos(a), r0*Math.sin(a));
+    fg.rotate(a + (rng()<0.5 ? 0 : Math.PI));
+    fg.font = face.w + " " + fs.toFixed(2) + "px " + face.f;
+    fg.textAlign = "left"; fg.textBaseline = "middle";
+    fg.fillStyle = tokenColor(r0/R + 0.2, a);
+    fg.fillText(word, 0, 0);
+    fg.restore();
+  }
+  yield "setting the spokes";
+
+  /* lash fringe along the upper margin, and a lighter lower fringe */
+  fg.setTransform(DPR,0,0,DPR,0,0);
+  drawLashes(fg, W, H, true);
+  drawLashes(fg, W, H, false);
+
+  /* lid shading */
+  const topG = fg.createLinearGradient(0,0,0,H*0.34);
+  topG.addColorStop(0,"rgba(8,4,6,.95)");
+  topG.addColorStop(0.42,"rgba(22,8,10,.52)");
+  topG.addColorStop(1,"rgba(30,10,12,0)");
+  fg.fillStyle = topG; fg.fillRect(0,0,W,H*0.34);
+  const botG = fg.createLinearGradient(0,H,0,H*0.74);
+  botG.addColorStop(0,"rgba(10,4,5,.82)");
+  botG.addColorStop(0.5,"rgba(26,9,10,.34)");
+  botG.addColorStop(1,"rgba(30,10,12,0)");
+  fg.fillStyle = botG; fg.fillRect(0,H*0.74,W,H*0.26);
+
+  /* punch the aperture: a wide soft fade so the globe can rove beneath */
+  fg.setTransform(DPR,0,0,DPR, EX*DPR, EY*DPR);
+  fg.globalCompositeOperation = "destination-out";
+  const punch = fg.createRadialGradient(0,0,R*1.09, 0,0,R*1.40);
+  punch.addColorStop(0,"rgba(0,0,0,1)");
+  punch.addColorStop(0.45,"rgba(0,0,0,.86)");
+  punch.addColorStop(1,"rgba(0,0,0,0)");
+  fg.fillStyle = punch;
+  fg.beginPath(); fg.arc(0,0,R*1.42,0,TAU); fg.fill();
+  fg.globalCompositeOperation = "source-over";
+  yield "veiling";
+
+  /* ── 5.5 grain + bloom buffers ─────────────────────────────────────── */
+  mkGrain();
+
+  glowCv  = mkCanvas(Math.max(2,Math.round(W*0.26)), Math.max(2,Math.round(H*0.26)));
+  glowCtx = glowCv.getContext("2d");
+  /* the halation is blurred at this scale, not at plate scale — a 6px blur across
+     a retina canvas is the single most expensive thing a frame can ask for */
+  blurCv  = mkCanvas(glowCv.width, glowCv.height);
+  blurCtx = blurCv.getContext("2d");
+
+  wCache.clear();
+  return;
+}
+
+function drawLashes(g, w, h, top){
+  const count = top ? Math.round(w/9) : Math.round(w/16);
+  for(let i=0;i<count;i++){
+    const x0 = rng()*w*1.06 - w*0.03;
+    const len = (top ? h*0.10 : h*0.055) * (0.35 + rng()*1.5);
+    const y0 = top ? h*0.008 + rng()*h*0.03 : h*(0.992) - rng()*h*0.02;
+    const sway = (rng()-0.5)*len*1.5;
+    const dir = top ? 1 : -1;
+    g.save();
+    g.beginPath();
+    g.moveTo(x0, y0);
+    g.quadraticCurveTo(x0 + sway*0.35, y0 + dir*len*0.55, x0 + sway, y0 + dir*len);
+    g.lineWidth = (0.7 + rng()*2.6);
+    g.lineCap = "round";
+    g.strokeStyle = top
+      ? "rgba(" + (10+rng()*22|0) + "," + (6+rng()*12|0) + "," + (8+rng()*14|0) + "," + (0.30+rng()*0.62).toFixed(2) + ")"
+      : "rgba(" + (26+rng()*30|0) + "," + (12+rng()*16|0) + "," + (12+rng()*14|0) + "," + (0.16+rng()*0.34).toFixed(2) + ")";
+    g.stroke();
+    g.restore();
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   6 · GAZE
+   ══════════════════════════════════════════════════════════════════════════ */
+let ptrX = -1, ptrY = -1, hasPtr = false;
+
+function setTargetFromPointer(){
+  if(!hasPtr || !P.follow){ return; }
+  const dx = (ptrX - EX) / (Math.min(W,H) * 0.62);
+  const dy = (ptrY - EY) / (Math.min(W,H) * 0.62);
+  const m  = Math.hypot(dx,dy);
+  const s  = m > 1 ? 1/m : 1;
+  G.tx = dx*s; G.ty = dy*s;
+}
+
+function updateGaze(dt){
+  const now = TIME;
+  const faceFresh = F.on && P.follow && (performance.now() - F.last < 900);
+
+  /* the camera outranks the pointer whenever it can actually see a face */
+  if(faceFresh){
+    G.tx = F.x; G.ty = F.y;
+    G.idle = false;
+    G.wnext = now + 1.2;   /* hold off the wander for a beat after we lose you */
+  } else {
+    /* autonomous wander when the pointer has gone still */
+    G.idle = !hasPtr || (performance.now() - G.lastMove > 2600);
+    if(G.idle){
+      if(now > G.wnext){
+        const a = rng()*TAU, m = Math.pow(rng(),0.7)*0.8;
+        G.wx = Math.cos(a)*m; G.wy = Math.sin(a)*m;
+        G.wnext = now + 0.7 + rng()*2.6;
+      }
+      G.tx += (G.wx - G.tx) * Math.min(1, dt*1.2);
+      G.ty += (G.wy - G.ty) * Math.min(1, dt*1.2);
+    } else {
+      setTargetFromPointer();
+    }
+  }
+
+  /* micro-saccades: the eye is never still */
+  if(now > G.sacT){
+    G.sacX = (rng()-0.5)*0.030;
+    G.sacY = (rng()-0.5)*0.030;
+    G.sacT = now + 0.055 + rng()*0.28;
+  }
+
+  const ease = 1 - Math.pow(0.0016, dt);
+  G.x += ((G.tx + G.sacX) - G.x) * ease;
+  G.y += ((G.ty + G.sacY) - G.y) * ease;
+
+  /* pupil: hippus + proximity + click pulse. Under the camera, proximity is
+     literal — lean toward the lens and the aperture opens. */
+  const hippus = 0.014*Math.sin(now*0.72) + 0.009*Math.sin(now*1.93 + 1.1) + 0.005*Math.sin(now*3.7);
+  let bias;
+  if(faceFresh){
+    bias = clamp((F.size - 0.24) * 0.30, -0.030, 0.060);
+  } else {
+    const prox = hasPtr ? clamp(1 - Math.hypot(ptrX-EX, ptrY-EY)/(R*2.4), 0, 1) : 0;
+    bias = -prox*0.055;
+  }
+  G.pupilT = 0.305 + hippus + bias + pulse;
+  pulse *= Math.pow(0.06, dt);
+  G.pupil += (G.pupilT - G.pupil) * (1 - Math.pow(0.02, dt));
+
+  /* blink */
+  if(P.blink){
+    if(!G.blinking && now > G.blinkNext){
+      G.blinking = true; G.blinkPhase = 0;
+      G.blinkNext = now + 3.2 + rng()*7.5;
+    }
+    if(G.blinking){
+      G.blinkPhase += dt / (G.blinkPhase < 0.5 ? 0.085 : 0.16);
+      if(G.blinkPhase >= 1){ G.blinking = false; G.blink = 0; }
+      else G.blink = Math.sin(G.blinkPhase*Math.PI);
+    }
+  } else { G.blink = 0; G.blinking = false; }
+}
+let pulse = 0;
+
+/* ══════════════════════════════════════════════════════════════════════════
+   7 · RENDER
+   ══════════════════════════════════════════════════════════════════════════ */
+function render(){
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.globalCompositeOperation = "source-over";
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = "#080607";
+  ctx.fillRect(0,0,W,H);
+  if(!ready) return;
+
+  const gm = Math.min(1, Math.hypot(G.x,G.y));
+  const ga = Math.atan2(G.y, G.x);
+  const shift  = R * 0.195 * gm;
+  const squash = 1 - 0.265 * gm;   /* the globe is a sphere: it foreshortens as it turns */
+
+  /* --- globe parallax: the whole eyeball rolls a little --- */
+  const gx = EX + Math.cos(ga)*shift*0.30;
+  const gy = EY + Math.sin(ga)*shift*0.30;
+
+  /* 7.1 sclera */
+  ctx.save();
+  ctx.translate(gx, gy);
+  ctx.rotate(ga); ctx.scale(1 - 0.06*gm, 1); ctx.rotate(-ga);
+  ctx.rotate(scleraLayer.phase);
+  ctx.drawImage(scleraLayer.cv, -SR, -SR, SR*2, SR*2);
+  ctx.restore();
+
+  /* 7.2 iris assembly — translated, then foreshortened along the gaze axis */
+  ctx.save();
+  ctx.translate(EX + Math.cos(ga)*shift, EY + Math.sin(ga)*shift);
+  ctx.rotate(ga); ctx.scale(squash, 1); ctx.rotate(-ga);
+
+  const RR = R*1.005;
+  if(P.fibre){
+    ctx.globalAlpha = P.wash;
+    ctx.drawImage(irisBase.cv, -RR, -RR, RR*2, RR*2);
+    ctx.globalAlpha = 1;
+  } else {
+    ctx.globalAlpha = P.wash*0.5;
+    ctx.drawImage(irisBase.cv, -RR, -RR, RR*2, RR*2);
+    ctx.globalAlpha = 1;
+  }
+  for(let i=0;i<ringLayers.length;i++){
+    const L = ringLayers[i];
+    ctx.save();
+    ctx.rotate(L.phase);
+    ctx.drawImage(L.cv, -RR, -RR, RR*2, RR*2);
+    ctx.restore();
+  }
+
+  /* 7.3 pupil — dilating aperture; text survives faintly beneath */
+  const pr = R * G.pupil;
+  const pgd = ctx.createRadialGradient(0,0,pr*0.05, 0,0,pr*1.14);
+  pgd.addColorStop(0.00,"rgba(3,4,8,.72)");
+  pgd.addColorStop(0.62,"rgba(3,4,9,.62)");
+  pgd.addColorStop(0.88,"rgba(4,6,13,.40)");
+  pgd.addColorStop(1.00,"rgba(6,9,18,0)");
+  ctx.fillStyle = pgd;
+  ctx.beginPath(); ctx.arc(0,0,pr*1.16,0,TAU); ctx.fill();
+
+  /* pupillary ruff — a hot rim where iris meets void */
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  const ruff = ctx.createRadialGradient(0,0,pr*0.94, 0,0,pr*1.30);
+  ruff.addColorStop(0,"rgba(255,196,110,0)");
+  ruff.addColorStop(0.30,"rgba(255,188,104,.16)");
+  ruff.addColorStop(1,"rgba(120,190,255,0)");
+  ctx.fillStyle = ruff;
+  ctx.beginPath(); ctx.arc(0,0,pr*1.30,0,TAU); ctx.fill();
+  ctx.restore();
+  ctx.restore();
+
+  /* 7.4 flesh, lids, lashes */
+  ctx.drawImage(fieldLayer, 0, 0, W, H);
+
+  /* 7.5 cornea: a glassy dome over everything */
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  const lx = GRAD.lx, ly = GRAD.ly;
+  ctx.fillStyle = GRAD.dome;
+  ctx.beginPath(); ctx.arc(EX, EY, SR*1.06, 0, TAU); ctx.fill();
+
+  /* principal catchlight — restrained; the plate is lit, not glazed */
+  ctx.fillStyle = GRAD.cl;
+  ctx.beginPath(); ctx.ellipse(lx, ly, R*0.24, R*0.19, -0.5, 0, TAU); ctx.fill();
+
+  /* hot core + secondary */
+  ctx.fillStyle = "rgba(255,255,252,.34)";
+  ctx.beginPath(); ctx.ellipse(lx - R*0.02, ly - R*0.02, R*0.038, R*0.027, -0.4, 0, TAU); ctx.fill();
+  const l2x = GRAD.l2x, l2y = GRAD.l2y;
+  ctx.fillStyle = GRAD.c2;
+  ctx.beginPath(); ctx.ellipse(l2x,l2y,R*0.15,R*0.09,0.6,0,TAU); ctx.fill();
+
+  /* tear meniscus along the lower margin */
+  ctx.fillStyle = GRAD.mg;
+  ctx.beginPath(); ctx.ellipse(EX, EY, SR*0.99, SR*0.99, 0, 0.14*Math.PI, 0.86*Math.PI); ctx.fill();
+  ctx.restore();
+
+  /* 7.6 blink */
+  if(G.blink > 0.001) drawBlink(G.blink);
+
+  /* 7.7 bloom — thresholded so only the lit letters halate, not the whole plate */
+  if(P.bloom > 0.01 && glowCtx && cv.width > 1 && cv.height > 1){
+    glowCtx.setTransform(1,0,0,1,0,0);
+    glowCtx.globalCompositeOperation = "source-over";
+    glowCtx.globalAlpha = 1;
+    glowCtx.clearRect(0,0,glowCv.width,glowCv.height);
+    glowCtx.drawImage(cv, 0,0, glowCv.width, glowCv.height);
+    /* crude highlight pass: subtract the midtones, keep the peaks */
+    glowCtx.globalCompositeOperation = "multiply";
+    glowCtx.drawImage(glowCv, 0,0);
+    glowCtx.globalCompositeOperation = "source-over";
+    /* blur down here, where there are 7% as many pixels; the 0.26 scale means
+       1.6px at this size lands as ~6px once it is drawn back up */
+    blurCtx.setTransform(1,0,0,1,0,0);
+    blurCtx.globalCompositeOperation = "source-over";
+    blurCtx.globalAlpha = 1;
+    blurCtx.clearRect(0,0,blurCv.width,blurCv.height);
+    blurCtx.filter = "blur(1.6px)";
+    blurCtx.drawImage(glowCv, 0,0);
+    blurCtx.filter = "none";
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = P.bloom * 0.62;
+    ctx.drawImage(blurCv, 0,0, W, H);
+    ctx.restore();
+  }
+
+  /* 7.8 vignette */
+  if(vigCv) ctx.drawImage(vigCv, 0, 0, W, H);
+
+  /* 7.9 grain */
+  if(grainCv && P.grain > 0.01){
+    ctx.save();
+    ctx.globalCompositeOperation = "overlay";
+    ctx.globalAlpha = P.grain * 0.20;
+    /* re-offset every frame so the grain twinkles rather than sits still */
+    const ox = -((rng()*GRAIN_TILE)|0), oy = -((rng()*GRAIN_TILE)|0);
+    for(let y=oy; y<H; y+=GRAIN_TILE)
+      for(let x=ox; x<W; x+=GRAIN_TILE)
+        ctx.drawImage(grainCv, x, y, GRAIN_TILE, GRAIN_TILE);
+    ctx.restore();
+  }
+}
+
+function drawBlink(b){
+  const closedY = EY + R*0.08;
+  const topOpen = -H*0.06, botOpen = H*1.06;
+  const ty = lerp(topOpen, closedY, b);
+  const by = lerp(botOpen, closedY, b);
+  const bow = R*0.22;
+
+  for(let i=0;i<2;i++){
+    const top = i===0;
+    const edge = top ? ty : by;
+    ctx.save();
+    ctx.beginPath();
+    if(top){
+      ctx.moveTo(-10, edge - bow*0.3);
+      ctx.quadraticCurveTo(W*0.5, edge + bow, W+10, edge - bow*0.3);
+      ctx.lineTo(W+10, -H); ctx.lineTo(-10,-H);
+    } else {
+      ctx.moveTo(-10, edge + bow*0.3);
+      ctx.quadraticCurveTo(W*0.5, edge - bow*0.75, W+10, edge + bow*0.3);
+      ctx.lineTo(W+10, H*2); ctx.lineTo(-10, H*2);
+    }
+    ctx.closePath();
+    ctx.clip();
+    /* borrow the flesh texture so the lid is made of words too */
+    ctx.drawImage(fieldLayer, 0, top ? edge - H*0.94 : edge - H*0.06, W, H);
+    const g = ctx.createLinearGradient(0, top ? edge-H*0.30 : edge+H*0.30, 0, edge);
+    g.addColorStop(0,"rgba(14,6,8,.30)");
+    g.addColorStop(0.75,"rgba(20,8,9,.55)");
+    g.addColorStop(1,"rgba(6,3,4,.92)");
+    ctx.fillStyle = g;
+    ctx.fillRect(-10, -H, W+20, H*3);
+    ctx.restore();
+
+    /* lash line */
+    ctx.save();
+    ctx.beginPath();
+    if(top){ ctx.moveTo(-10, edge-bow*0.3); ctx.quadraticCurveTo(W*0.5, edge+bow, W+10, edge-bow*0.3); }
+    else   { ctx.moveTo(-10, edge+bow*0.3); ctx.quadraticCurveTo(W*0.5, edge-bow*0.75, W+10, edge+bow*0.3); }
+    ctx.lineWidth = top ? 5 : 3;
+    ctx.strokeStyle = top ? "rgba(4,2,3,.92)" : "rgba(10,4,5,.62)";
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   8 · LOOP
+   ══════════════════════════════════════════════════════════════════════════ */
+function frame(now){
+  requestAnimationFrame(frame);
+  const dt = Math.min(0.05, (now - lastT)/1000);
+  lastT = now;
+
+  /* a pane that was hidden (or zero-sized) at load may never fire `resize`.
+     Only act once the reported size has held steady across two checks, and
+     never while a build is already in flight. */
+  sizeWatch += dt;
+  if(ready && sizeWatch > 0.5){
+    sizeWatch = 0;
+    const iw = Math.max(2, window.innerWidth|0), ih = Math.max(2, window.innerHeight|0);
+    if(isChromeSlide(iw, ih)){
+      cv.style.height = ih + "px";   /* URL bar, not a new layout — see below */
+      pendingSize = null;
+    } else if(Math.abs(iw - W) > 2 || Math.abs(ih - H) > 2){
+      if(pendingSize && Math.abs(pendingSize[0]-iw) <= 2 && Math.abs(pendingSize[1]-ih) <= 2){
+        pendingSize = null; scheduleRebuild();
+      } else pendingSize = [iw, ih];
+    } else pendingSize = null;
+  }
+
+  fpsAcc += dt; fpsN++;
+  if(fpsAcc > 0.6){
+    fps = fpsN/fpsAcc; fpsAcc = 0; fpsN = 0;
+    const el = document.getElementById("fps");
+    if(el) el.textContent = Math.round(fps) + " fps";
+  }
+
+  if(!P.paused){
+    TIME += dt;
+    if(ready){
+      irisBase.phase = irisBase.dir * irisBase.rate * TIME * P.spin;
+      scleraLayer.phase = scleraLayer.dir * scleraLayer.rate * TIME * P.spin;
+      for(const L of ringLayers){
+        /* each lexicon breathes: rate is modulated on a long, slow cycle */
+        const mod = 1 + 0.22*Math.sin(TIME*0.11 + L.rate*90);
+        L.phase = L.dir * L.rate * mod * TIME * P.spin;
+      }
+    }
+  }
+  updateGaze(dt);
+  render();
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   9 · LAYOUT + BUILD DRIVER
+   ══════════════════════════════════════════════════════════════════════════ */
+const loader   = document.getElementById("loader");
+const ldBar    = document.getElementById("ld-bar");
+const ldSub    = document.getElementById("ld-sub");
+const ldWord   = document.getElementById("ld-word");
+const LOAD_WORDS = ["Searching","Watchful","Knowing","Piercing","Penetrating","Unblinking","All-seeing"];
+
+let buildIter = null, buildSteps = 0, buildTotal = 118;
+
+/* ── grain plate ────────────────────────────────────────────────────────────
+   A pattern fill across the whole plate is bimodal: fast while the canvas stays
+   GPU-resident, ~30× slower the moment it does not. A pre-baked tile blitted a
+   dozen times is uniformly fast, so the film grain never becomes the thing that
+   costs the frame. Baked at device resolution so one noise cell is still one CSS
+   pixel — the look is unchanged. */
+const GRAIN_NOISE = 220;
+/* an exact multiple of the noise period, or the tile edges do not line up with
+   their neighbours and the plate picks up a faint seam grid */
+const GRAIN_TILE = GRAIN_NOISE * 3;
+function mkGrain(){
+  const n = GRAIN_NOISE;
+  const gt = mkCanvas(n,n);
+  const gtc = gt.getContext("2d");
+  const id = gtc.createImageData(n,n);
+  for(let i=0;i<id.data.length;i+=4){
+    const v = 118 + (Math.random()*104 - 52);
+    id.data[i]=id.data[i+1]=id.data[i+2]=v;
+    id.data[i+3]=255;
+  }
+  gtc.putImageData(id,0,0);
+
+  grainCv = mkCanvas(Math.max(2,Math.round(GRAIN_TILE*DPR)), Math.max(2,Math.round(GRAIN_TILE*DPR)));
+  const gc = grainCv.getContext("2d");
+  gc.setTransform(DPR,0,0,DPR,0,0);
+  gc.fillStyle = gc.createPattern(gt,"repeat");
+  gc.fillRect(0,0,GRAIN_TILE,GRAIN_TILE);
+}
+
+/* ── static gradients ───────────────────────────────────────────────────────
+   Every gradient below is a pure function of the layout, so it is built once
+   per resize instead of seven fresh objects every frame. The vignette goes
+   further and is baked to its own plate: filling a radial gradient across a
+   retina canvas measures ~21 ms, blitting the same thing ~0.6 ms. It is baked at
+   half resolution because a gradient that smooth loses nothing on the way up. */
+let GRAD = null;
+function mkGradients(){
+  const lx  = EX - R*0.42, ly  = EY - R*0.46;
+  const l2x = EX + R*0.50, l2y = EY + R*0.38;
+
+  const dome = ctx.createRadialGradient(lx, ly, R*0.04, EX, EY, SR*1.05);
+  dome.addColorStop(0,"rgba(255,248,235,.10)");
+  dome.addColorStop(0.30,"rgba(210,228,255,.035)");
+  dome.addColorStop(1,"rgba(120,160,220,0)");
+
+  const cl = ctx.createRadialGradient(lx, ly, 0, lx, ly, R*0.26);
+  cl.addColorStop(0,"rgba(255,253,246,.30)");
+  cl.addColorStop(0.30,"rgba(255,250,240,.10)");
+  cl.addColorStop(1,"rgba(255,250,240,0)");
+
+  const c2 = ctx.createRadialGradient(l2x,l2y,0,l2x,l2y,R*0.16);
+  c2.addColorStop(0,"rgba(226,240,255,.14)");
+  c2.addColorStop(1,"rgba(226,240,255,0)");
+
+  const mg = ctx.createLinearGradient(0, EY + SR*0.74, 0, EY + SR*1.02);
+  mg.addColorStop(0,"rgba(255,236,214,0)");
+  mg.addColorStop(0.7,"rgba(255,240,222,.08)");
+  mg.addColorStop(1,"rgba(255,246,232,.18)");
+
+  GRAD = { lx, ly, l2x, l2y, dome, cl, c2, mg };
+
+  /* the vignette, baked once at half resolution */
+  vigCv = mkCanvas(Math.max(2,Math.round(W*DPR*0.5)), Math.max(2,Math.round(H*DPR*0.5)));
+  const vc = vigCv.getContext("2d");
+  vc.setTransform(vigCv.width/W, 0, 0, vigCv.height/H, 0, 0);
+  const vg = vc.createRadialGradient(EX, EY, Math.min(W,H)*0.24, EX, EY, CORNER*1.02);
+  vg.addColorStop(0,"rgba(0,0,0,0)");
+  vg.addColorStop(0.62,"rgba(4,2,3,.20)");
+  vg.addColorStop(1,"rgba(2,1,2,.90)");
+  vc.fillStyle = vg;
+  vc.fillRect(0,0,W,H);
+}
+
+function layout(){
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  /* A safety net for very large displays only. The post chain used to be
+     fill-rate bound, which made this the difference between 20 and 60 fps; with
+     the vignette and grain baked it no longer is, so the budget now sits high
+     enough that a retina laptop keeps its full resolution and only a 6K panel
+     gets trimmed. Lower it if a frame rate ever sags again. */
+  const PX_BUDGET = 12e6;
+  const wantPx = Math.max(2, window.innerWidth|0) * Math.max(2, window.innerHeight|0) * DPR * DPR;
+  if(wantPx > PX_BUDGET) DPR = Math.max(1, DPR * Math.sqrt(PX_BUDGET/wantPx));
+  LDPR = Math.min(DPR, 2);
+  /* a hidden or not-yet-laid-out pane can report 0 — never build a 0-wide plate */
+  W = Math.max(2, window.innerWidth  | 0);
+  H = Math.max(2, window.innerHeight | 0);
+  cv.width  = Math.max(2, Math.round(W*DPR));
+  cv.height = Math.max(2, Math.round(H*DPR));
+  cv.style.width = W + "px"; cv.style.height = H + "px";
+
+  EX = W * 0.5;
+  EY = H * 0.475;
+  R  = Math.min(W * 0.315, H * 0.395);
+  SR = R * 1.40;
+  sc = R / 360;
+  CORNER = Math.max(
+    Math.hypot(EX,EY), Math.hypot(W-EX,EY),
+    Math.hypot(EX,H-EY), Math.hypot(W-EX,H-EY)
+  );
+  /* trim layer resolution on very large canvases to keep memory sane */
+  const megapx = (R*2*LDPR)*(R*2*LDPR)/1e6;
+  if(megapx > 3.2) LDPR = Math.max(1, LDPR * Math.sqrt(3.2/megapx));
+  mkGradients();
+}
+
+function startBuild(){
+  ready = false;
+  loader.classList.remove("gone");
+  ldBar.style.width = "0%";
+  ldWord.textContent = LOAD_WORDS[(Math.random()*LOAD_WORDS.length)|0];
+  rng = mulberry32(SEED);
+  publishSeed();
+  wCache.clear();
+  layout();
+  buildIter = construct();
+  buildSteps = 0;
+  pumpBuild();
+}
+
+function pumpBuild(){
+  const t0 = performance.now();
+  let res;
+  while(performance.now() - t0 < 22){
+    res = buildIter.next();
+    if(res.done) break;
+    buildSteps++;
+    if(res.value) ldSub.textContent = String(res.value).toLowerCase();
+  }
+  const pct = res && res.done ? 100 : Math.min(97, buildSteps/buildTotal*100);
+  ldBar.style.width = pct.toFixed(1) + "%";
+  if(res && res.done){
+    buildTotal = Math.max(30, buildSteps);
+    ready = true;
+    ldBar.style.width = "100%";
+    setTimeout(function(){ loader.classList.add("gone"); }, 180);
+    return;
+  }
+  requestAnimationFrame(pumpBuild);
+}
+
+let resizeTimer = null;
+function scheduleRebuild(){
+  clearTimeout(resizeTimer);
+  ready = false;
+  loader.classList.remove("gone");
+  ldSub.textContent = "recomposing the plate";
+  resizeTimer = setTimeout(startBuild, 260);
+}
+/* A phone's URL bar sliding in or out fires `resize` with a modest height
+   change and nothing else. Rebuilding there blacks the piece out behind the
+   loader for a second, so instead let the plate stretch into the new height
+   and wait for a real layout change (rotation, a genuine resize). */
+const TOUCH = window.matchMedia("(hover:none)").matches;
+function isChromeSlide(iw, ih){
+  return TOUCH && iw === W && Math.abs(ih - H) <= Math.max(60, H*0.18);
+}
+window.addEventListener("resize", function(){
+  const iw = Math.max(2, window.innerWidth|0), ih = Math.max(2, window.innerHeight|0);
+  if(isChromeSlide(iw, ih)){ cv.style.height = ih + "px"; return; }
+  scheduleRebuild();
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   10 · INPUT
+   ══════════════════════════════════════════════════════════════════════════ */
+function onMove(x,y){
+  ptrX = x; ptrY = y; hasPtr = true;
+  G.lastMove = performance.now();
+}
+window.addEventListener("pointermove", function(e){ onMove(e.clientX, e.clientY); }, {passive:true});
+window.addEventListener("pointerdown", function(e){
+  onMove(e.clientX, e.clientY);
+  pulse = 0.085;   /* the pupil flares */
+}, {passive:true});
+window.addEventListener("pointerleave", function(){ hasPtr = false; });
+window.addEventListener("touchmove", function(e){
+  if(e.touches[0]) onMove(e.touches[0].clientX, e.touches[0].clientY);
+}, {passive:true});
+
+/* ---- panel wiring ---- */
+function bindRange(id, key, fmt, scale){
+  const s = document.getElementById("s-"+id);
+  const v = document.getElementById("v-"+id);
+  const apply = function(){
+    P[key] = s.value/ (scale||100);
+    v.textContent = fmt(P[key]);
+  };
+  s.addEventListener("input", apply);
+  apply();
+  return s;
+}
+bindRange("spin","spin", function(x){ return x.toFixed(1); });
+bindRange("reach","reach", function(x){ return x.toFixed(1); });
+bindRange("wash","wash", function(x){ return x.toFixed(2).slice(1); });
+bindRange("bloom","bloom", function(x){ return x.toFixed(2).slice(1); });
+bindRange("grain","grain", function(x){ return x.toFixed(2).slice(1); });
+const denS = document.getElementById("s-den");
+const denV = document.getElementById("v-den");
+denS.addEventListener("input", function(){ denV.textContent = (denS.value/100).toFixed(2); });
+denS.addEventListener("change", function(){
+  P.density = denS.value/100;
+  startBuild();
+});
+
+function bindToggle(id, key){
+  const b = document.getElementById("t-"+id);
+  b.addEventListener("click", function(){
+    P[key] = !P[key];
+    b.classList.toggle("on", P[key]);
+  });
+  return b;
+}
+bindToggle("follow","follow");
+bindToggle("blink","blink");
+bindToggle("fibre","fibre");
+bindToggle("mirror","mirror");
+const pauseBtn = bindToggle("pause","paused");
+
+/* ---- bridge for the camera module ----------------------------------------
+   The module hands us the face centre normalised to the video frame, plus the
+   face width as a fraction of frame width. Everything optical happens here so
+   the module stays a thin transport. */
+window.OCULUS = {
+  face: function(nx, ny, sizeFrac){
+    let fx = (nx - 0.5) * 2;
+    const fy = (ny - 0.5) * 2;
+    if(P.mirror) fx = -fx;          /* a webcam faces you: left is right */
+    fx *= P.reach; let fyy = fy * P.reach;
+    const m = Math.hypot(fx, fyy);
+    if(m > 1){ fx /= m; fyy /= m; }
+    F.x = fx; F.y = fyy; F.size = sizeFrac;
+    F.last = performance.now();
+  },
+  lost: function(){ F.last = -1e9; },
+  setActive: function(on){
+    F.on = !!on;
+    if(!on) F.last = -1e9;
+    const b = document.getElementById("t-face");
+    if(b) b.classList.toggle("on", !!on);
+  },
+  isMirrored: function(){ return P.mirror; }
+};
+document.getElementById("t-regen").addEventListener("click", function(){
+  SEED = (Math.random()*1e9)|0;
+  startBuild();
+});
+
+/* ---- dock ----------------------------------------------------------------
+   On a phone the panel is most of the screen, so there it rests stowed and the
+   dock button in the corner summons it. On a pointer machine nothing changes:
+   the panel keeps its faint always-there presence and the dock stays absent. */
+const panelEl = document.getElementById("panel");
+const dockEl  = document.getElementById("dock");
+const stowMQ  = window.matchMedia("(max-width:720px),(hover:none)");
+
+function setPanelOpen(open){
+  panelEl.classList.toggle("stow", !open);
+  panelEl.classList.toggle("open", open);
+  dockEl.classList.toggle("on", open);
+  dockEl.setAttribute("aria-expanded", open ? "true" : "false");
+}
+function applyStowMode(){
+  if(stowMQ.matches) setPanelOpen(false);
+  else {
+    panelEl.classList.remove("stow","open");
+    dockEl.classList.remove("on");
+    dockEl.setAttribute("aria-expanded","false");
+  }
+}
+applyStowMode();
+if(stowMQ.addEventListener) stowMQ.addEventListener("change", applyStowMode);
+else if(stowMQ.addListener) stowMQ.addListener(applyStowMode);
+
+dockEl.addEventListener("click", function(){
+  setPanelOpen(panelEl.classList.contains("stow"));
+});
+
+let chromeHidden = false;
+window.addEventListener("keydown", function(e){
+  const k = e.key.toLowerCase();
+  if(k === " " || e.code === "Space"){
+    e.preventDefault();
+    P.paused = !P.paused;
+    pauseBtn.classList.toggle("on", P.paused);
+  } else if(k === "r"){
+    SEED = (Math.random()*1e9)|0; startBuild();
+  } else if(k === "h"){
+    chromeHidden = !chromeHidden;
+    document.querySelectorAll(".chrome").forEach(function(el){ el.classList.toggle("hidden", chromeHidden); });
+    panelEl.classList.toggle("hidden", chromeHidden);
+    dockEl.classList.toggle("hidden", chromeHidden);
+  } else if(k === "f"){
+    if(document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen && document.documentElement.requestFullscreen();
+  }
+});
+
+/* fade the title once the piece has settled */
+setTimeout(function(){
+  const t = document.getElementById("title");
+  if(t) t.style.opacity = "0.55";
+}, 9000);
+
+/* ══════════════════════════════════════════════════════════════════════════ */
+startBuild();
+requestAnimationFrame(frame);
+
+})();
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     CAMERA · face tracking via MediaPipe BlazeFace (short range)
+
+     Requirements, in the order they bite:
+       1. SECURE CONTEXT. getUserMedia is unreachable from file://. Serve this
+          over http://localhost:PORT (localhost counts as secure) or https.
+       2. macOS: System Settings → Privacy & Security → Camera → allow your
+          browser. This is the OS gate and is separate from the page prompt.
+       3. The page will then ask for camera permission; that grant is bound to
+          the origin, which is why a stable localhost port is worth using.
+
+     Assets come from a CDN on first run and are then HTTP-cached. To run fully
+     offline, download the two URLs below next to this file and repoint them.
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script type="module">
+(function(){
+"use strict";
+
+const MP_VERSION = "1.0.1";
+
+/* A host may keep these assets locally so the detector never touches the network:
+   window.OCULUS_ASSETS, set before this module runs, or ?assets=/dir in a plain
+   browser. With neither, we fetch from the CDN exactly as before. */
+const MP_LOCAL = (function(){
+  try{
+    if(typeof window.OCULUS_ASSETS === "string" && window.OCULUS_ASSETS)
+      return window.OCULUS_ASSETS.replace(/\/+$/, "");
+    const q = new URLSearchParams(location.search).get("assets");
+    if(q) return q.replace(/\/+$/, "");
+  }catch(e){ /* no URLSearchParams, or an opaque origin */ }
+  return null;
+})();
+
+const MP_BUNDLE  = MP_LOCAL ? MP_LOCAL + "/vision_bundle.mjs"
+                 : "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@" + MP_VERSION + "/vision_bundle.mjs";
+const MP_WASM    = MP_LOCAL ? MP_LOCAL + "/wasm"
+                 : "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@" + MP_VERSION + "/wasm";
+const MP_MODEL   = MP_LOCAL ? MP_LOCAL + "/blaze_face_short_range.tflite"
+                 : "https://storage.googleapis.com/mediapipe-models/face_detector/"
+                 + "blaze_face_short_range/float16/1/blaze_face_short_range.tflite";
+
+const statEl  = document.getElementById("face-stat");
+const vid     = document.getElementById("cam-vid");
+const ov      = document.getElementById("cam-ov");
+const ovc     = ov.getContext("2d");
+const wrap    = document.getElementById("cam-wrap");
+const btnFace = document.getElementById("t-face");
+const btnCam  = document.getElementById("t-cam");
+const btnMir  = document.getElementById("t-mirror");
+
+function say(html, kind){ statEl.className = kind || ""; statEl.innerHTML = html; }
+/* platform error text can contain < or > — never let it reach innerHTML raw */
+function esc(s){ return String(s).replace(/[&<>]/g, function(c){
+  return c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;"; }); }
+
+/* keep the preview's handedness matched to the gaze mapping */
+function syncMirror(){ vid.classList.toggle("mir", window.OCULUS.isMirrored()); }
+btnMir.addEventListener("click", syncMirror);
+syncMirror();
+
+btnCam.addEventListener("click", function(){
+  const show = wrap.classList.toggle("show");
+  btnCam.classList.toggle("on", show);
+});
+
+let detector = null, stream = null, running = false, booting = null;
+let pumpGen = 0;
+let lastTs = -1, lastDetect = 0;
+let sx = 0.5, sy = 0.5, ssz = 0.25, primed = false;
+let seen = 0, missed = 0;
+
+/* ---- overlay ---------------------------------------------------------- */
+function fitOverlay(){
+  const r = ov.getBoundingClientRect();
+  const d = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.max(2, Math.round(r.width * d)), h = Math.max(2, Math.round(r.height * d));
+  if(ov.width !== w || ov.height !== h){ ov.width = w; ov.height = h; }
+  return [w, h, d];
+}
+function drawOverlay(nx, ny, sz){
+  const f = fitOverlay(), w = f[0], h = f[1], d = f[2];
+  ovc.setTransform(1,0,0,1,0,0);
+  ovc.clearRect(0,0,w,h);
+  const x = (window.OCULUS.isMirrored() ? 1 - nx : nx) * w;
+  const y = ny * h;
+  const rr = sz * w * 0.5;
+  ovc.lineWidth = 1 * d;
+  ovc.strokeStyle = "rgba(201,178,138,.85)";
+  ovc.strokeRect(x - rr, y - rr*1.15, rr*2, rr*2.3);
+  ovc.beginPath();
+  ovc.moveTo(x - rr*0.4, y); ovc.lineTo(x + rr*0.4, y);
+  ovc.moveTo(x, y - rr*0.4); ovc.lineTo(x, y + rr*0.4);
+  ovc.strokeStyle = "rgba(255,240,210,.95)";
+  ovc.stroke();
+}
+function clearOverlay(){
+  const f = fitOverlay();
+  ovc.setTransform(1,0,0,1,0,0);
+  ovc.clearRect(0,0,f[0],f[1]);
+}
+
+/* ---- detection loop ---------------------------------------------------- */
+function pump(gen){
+  if(!running || gen !== pumpGen) return;
+  const now = performance.now();
+  if(detector && vid.readyState >= 2 && now - lastDetect > 30){
+    lastDetect = now;
+    const ts = now > lastTs ? now : lastTs + 1;   /* must be monotonic */
+    lastTs = ts;
+    let res = null;
+    try { res = detector.detectForVideo(vid, ts); }
+    catch(e){ /* a dropped frame is not worth tearing the loop down */ }
+
+    const det = res && res.detections && res.detections[0];
+    if(det && det.boundingBox){
+      const bb = det.boundingBox;
+      const vw = vid.videoWidth  || 640;
+      const vh = vid.videoHeight || 480;
+      const cx = (bb.originX + bb.width  * 0.5) / vw;
+      const cy = (bb.originY + bb.height * 0.5) / vh;
+      const sz = bb.width / vw;
+      if(!primed){ sx = cx; sy = cy; ssz = sz; primed = true; }
+      /* BlazeFace jitters a few px frame to frame; smooth before it reaches
+         the eye, or the micro-saccades turn into a tremor */
+      sx  += (cx - sx)  * 0.30;
+      sy  += (cy - sy)  * 0.30;
+      ssz += (sz - ssz) * 0.14;
+      window.OCULUS.face(sx, sy, ssz);
+      drawOverlay(sx, sy, ssz);
+      seen++; missed = 0;
+      if(seen % 12 === 0){
+        say("tracking · " + Math.round(sx*100) + "," + Math.round(sy*100)
+            + " · " + (ssz*100).toFixed(0) + "% frame", "ok");
+      }
+    } else {
+      missed++; primed = false;
+      window.OCULUS.lost();
+      if(missed === 8){ clearOverlay(); say("no face in frame — it will wander until you return"); }
+    }
+  }
+  requestAnimationFrame(function(){ pump(gen); });
+}
+
+/* ---- boot --------------------------------------------------------------
+   Two callers race on every kiosk load: the page's own ?kiosk=1 block arms
+   the camera, and the native host calls start() again from didFinish. When
+   the loser got a bare `false`, start() treated it as failure and ran halt()
+   plus setActive(false) — tearing down the winner's session flag while its
+   getUserMedia was still in flight. The camera came up and the detector ran,
+   but F.on stayed false, so the eye never used a single frame of it.
+   Handing both callers the same in-flight promise makes start() idempotent. */
+function boot(){
+  if(booting) return booting;
+  const p = bootOnce();
+  booting = p;
+  const clear = function(){ if(booting === p) booting = null; };
+  p.then(clear, clear);
+  return p;
+}
+
+async function bootOnce(){
+  try{
+    if(!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      say("<b>not a secure context.</b> the camera is unreachable from <b>file://</b>.<br>"
+        + "serve this folder and reopen at <b>http://localhost:8000/"
+        + esc(location.pathname.split("/").pop() || "index.html") + "</b>", "err");
+      return false;
+    }
+
+    if(!detector){
+      say("loading the detector…");
+      let mod;
+      try { mod = await import(MP_BUNDLE); }
+      catch(e){
+        say("could not load MediaPipe " + MP_VERSION + " from the CDN.<br>"
+          + "check your connection, or edit <b>MP_VERSION</b> near the bottom of this file.", "err");
+        return false;
+      }
+      const fileset = await mod.FilesetResolver.forVisionTasks(MP_WASM);
+      const opts = {
+        baseOptions: { modelAssetPath: MP_MODEL, delegate: "GPU" },
+        runningMode: "VIDEO",
+        minDetectionConfidence: 0.4
+      };
+      try {
+        detector = await mod.FaceDetector.createFromOptions(fileset, opts);
+      } catch(e){
+        /* some GPUs/drivers refuse the WebGL delegate — CPU is fast enough here */
+        opts.baseOptions.delegate = "CPU";
+        detector = await mod.FaceDetector.createFromOptions(fileset, opts);
+      }
+    }
+
+    say("requesting camera…");
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { width:{ideal:640}, height:{ideal:480}, facingMode:"user" },
+      audio: false
+    });
+    vid.srcObject = stream;
+    await vid.play();
+
+    running = true; primed = false; seen = 0; missed = 0;
+    say("tracking", "ok");
+    const gen = ++pumpGen;
+    requestAnimationFrame(function(){ pump(gen); });
+    return true;
+
+  } catch(err){
+    const n = err && err.name;
+    if(n === "NotAllowedError")
+      say("<b>permission denied.</b> allow the camera for this site, and check<br>"
+        + "System Settings → Privacy &amp; Security → Camera for your browser.", "err");
+    else if(n === "NotFoundError" || n === "OverconstrainedError")
+      say("<b>no camera found.</b> is another app holding it?", "err");
+    else if(n === "NotReadableError")
+      say("<b>camera busy.</b> another app (Zoom, Photo Booth…) has it open.", "err");
+    else
+      say("camera failed: " + esc(err && err.message ? err.message : String(err)), "err");
+    return false;
+  }
+}
+
+function halt(){
+  running = false;
+  pumpGen++;            /* orphan any frame already scheduled */
+  if(stream){ stream.getTracks().forEach(function(t){ t.stop(); }); stream = null; }
+  vid.srcObject = null;
+  clearOverlay();
+  window.OCULUS.lost();
+  say("camera idle — press <b>Face</b> to let it see you");
+}
+
+/* Host bridge. A native wrapper drives the camera without the panel, so it can
+   hand it back the moment the piece is covered up rather than holding it all day. */
+window.OCULUS_HOST = {
+  isRunning: function(){ return running; },
+  start: async function(){
+    if(running) return true;
+    window.OCULUS.setActive(true);
+    const ok = await boot();
+    if(!ok){ window.OCULUS.setActive(false); halt(); }
+    return ok;
+  },
+  stop: function(){
+    if(!running) return;
+    halt();
+    window.OCULUS.setActive(false);
+  }
+};
+
+btnFace.addEventListener("click", function(){
+  if(running) window.OCULUS_HOST.stop();
+  else window.OCULUS_HOST.start();
+});
+
+/* release the camera when the page goes away */
+window.addEventListener("pagehide", halt);
+
+})();
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     KIOSK · ?kiosk=1 strips the chrome and starts the camera unattended, for a
+     host that renders this as wallpaper or a screensaver. Without the parameter
+     this block does nothing whatsoever.
+       ?kiosk=1        hide panel, dock, title, motto; hide the cursor
+       &face=0         leave the camera alone (the eye wanders on its own)
+       &blink=0        never blink — the twitch reads as distraction on a desktop
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script>
+(function(){
+  "use strict";
+  let P;
+  try { P = new URLSearchParams(location.search); }
+  catch(e){ return; }
+  if(P.get("kiosk") !== "1") return;
+
+  document.documentElement.classList.add("kiosk");
+  const css = document.createElement("style");
+  css.textContent =
+    "html.kiosk #panel,html.kiosk #dock,html.kiosk #title,html.kiosk #motto{display:none!important}" +
+    "html.kiosk,html.kiosk body,html.kiosk #c{cursor:none!important}";
+  document.head.appendChild(css);
+
+  /* The panel's own toggle owns both the flag and the button state, so drive it
+     rather than reaching into the engine. Block 0 has already bound it by now. */
+  if(P.get("blink") === "0"){
+    const b = document.getElementById("t-blink");
+    if(b && b.classList.contains("on")) b.click();
+  }
+
+  if(P.get("face") === "0") return;
+
+  /* the camera module is deferred, so its bridge does not exist yet */
+  function arm(){
+    let tries = 0;
+    (function attempt(){
+      if(window.OCULUS_HOST){ window.OCULUS_HOST.start(); return; }
+      if(++tries < 60) setTimeout(attempt, 100);
+    })();
+  }
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", arm);
+  else arm();
+})();
+</script>
+</body>
+</html>
